@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>YARA Rule Submission Platform</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            max-width: 600px;
+            width: 100%;
+            padding: 40px;
+        }
+
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 28px;
+        }
+
+        .subtitle {
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 14px;
+        }
+
+        .form-group {
+            margin-bottom: 24px;
+        }
+
+        label {
+            display: block;
+            color: #333;
+            font-weight: 600;
+            margin-bottom: 8px;
+            font-size: 14px;
+        }
+
+        select, input[type="file"] {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 6px;
+            font-size: 14px;
+            font-family: inherit;
+            transition: border-color 0.3s;
+        }
+
+        select:focus, input[type="file"]:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        select:hover, input[type="file"]:hover {
+            border-color: #667eea;
+        }
+
+        button {
+            width: 100%;
+            padding: 12px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-weight: 600;
+            font-size: 16px;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        button:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px rgba(102, 126, 234, 0.4);
+        }
+
+        button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .spinner {
+            display: inline-block;
+            width: 14px;
+            height: 14px;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            border-top-color: white;
+            animation: spin 0.8s linear infinite;
+            margin-right: 8px;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .results {
+            margin-top: 40px;
+            padding-top: 30px;
+            border-top: 2px solid #f0f0f0;
+            display: none;
+        }
+
+        .results.show {
+            display: block;
+        }
+
+        .result-section {
+            margin-bottom: 24px;
+        }
+
+        .result-title {
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 12px;
+            font-size: 16px;
+        }
+
+        .result-stat {
+            display: flex;
+            justify-content: space-between;
+            padding: 10px 0;
+            font-size: 14px;
+            border-bottom: 1px solid #f0f0f0;
+        }
+
+        .result-stat:last-child {
+            border-bottom: none;
+        }
+
+        .result-label {
+            color: #666;
+        }
+
+        .result-value {
+            font-weight: 600;
+            color: #333;
+        }
+
+        .matches-list {
+            background: #f8f9fa;
+            border-radius: 6px;
+            padding: 12px;
+            margin-top: 8px;
+            font-size: 13px;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+
+        .match-item {
+            padding: 6px 0;
+            color: #555;
+            word-break: break-all;
+        }
+
+        .match-item:not(:last-child) {
+            border-bottom: 1px solid #e0e0e0;
+        }
+
+        .status-passed {
+            color: #27ae60;
+            font-weight: 600;
+            padding: 12px;
+            background: #d5f4e6;
+            border-radius: 6px;
+            text-align: center;
+            margin-bottom: 16px;
+        }
+
+        .status-failed {
+            color: #c0392b;
+            font-weight: 600;
+            padding: 12px;
+            background: #fadbd8;
+            border-radius: 6px;
+            text-align: center;
+            margin-bottom: 16px;
+        }
+
+        .error {
+            color: #c0392b;
+            background: #fadbd8;
+            padding: 12px;
+            border-radius: 6px;
+            margin-top: 16px;
+            font-size: 14px;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 20px;
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔍 YARA Rule Submission</h1>
+        <p class="subtitle">Submit your YARA rule for malware detection lab</p>
+
+        <form id="submissionForm">
+            <div class="form-group">
+                <label for="labSelect">Select Lab:</label>
+                <select id="labSelect" required>
+                    <option value="">-- Choose a lab --</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label for="ruleFile">Upload YARA Rule (.yara or .yar):</label>
+                <input type="file" id="ruleFile" accept=".yara,.yar,.txt" required>
+            </div>
+
+            <button type="submit" id="submitBtn">Submit Rule</button>
+        </form>
+
+        <div class="error" id="errorMessage" style="display: none;"></div>
+
+        <div class="results" id="resultsContainer">
+            <div id="statusMessage"></div>
+
+            <div class="result-section">
+                <div class="result-title">Lab Results:</div>
+                <div class="result-stat">
+                    <span class="result-label">Total Files:</span>
+                    <span class="result-value" id="labTotal">-</span>
+                </div>
+                <div class="result-stat">
+                    <span class="result-label">Matched Files:</span>
+                    <span class="result-value" id="labMatched">-</span>
+                </div>
+                <div id="labMatchesList"></div>
+            </div>
+
+            <div class="result-section">
+                <div class="result-title">Benign Files:</div>
+                <div class="result-stat">
+                    <span class="result-label">Total Files:</span>
+                    <span class="result-value" id="benignTotal">-</span>
+                </div>
+                <div class="result-stat">
+                    <span class="result-label">Matched Files:</span>
+                    <span class="result-value" id="benignMatched">-</span>
+                </div>
+                <div id="benignMatchesList"></div>
+            </div>
+
+            <div class="result-section">
+                <div class="result-title">Random Files:</div>
+                <div class="result-stat">
+                    <span class="result-label">Total Files:</span>
+                    <span class="result-value" id="randomTotal">-</span>
+                </div>
+                <div class="result-stat">
+                    <span class="result-label">Matched Files:</span>
+                    <span class="result-value" id="randomMatched">-</span>
+                </div>
+                <div id="randomMatchesList"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const form = document.getElementById('submissionForm');
+        const labSelect = document.getElementById('labSelect');
+        const ruleFile = document.getElementById('ruleFile');
+        const submitBtn = document.getElementById('submitBtn');
+        const errorMessage = document.getElementById('errorMessage');
+        const resultsContainer = document.getElementById('resultsContainer');
+        const statusMessage = document.getElementById('statusMessage');
+
+        // Load available labs on page load
+        async function loadLabs() {
+            try {
+                const response = await fetch('/labs');
+                const data = await response.json();
+                
+                data.labs.forEach(lab => {
+                    const option = document.createElement('option');
+                    option.value = lab;
+                    option.textContent = lab.toUpperCase();
+                    labSelect.appendChild(option);
+                });
+            } catch (error) {
+                showError('Failed to load available labs');
+            }
+        }
+
+        // Handle form submission
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const labId = labSelect.value;
+            const file = ruleFile.files[0];
+
+            if (!labId) {
+                showError('Please select a lab');
+                return;
+            }
+
+            if (!file) {
+                showError('Please select a YARA rule file');
+                return;
+            }
+
+            // Clear previous errors and results
+            errorMessage.style.display = 'none';
+            resultsContainer.classList.remove('show');
+
+            // Disable button and show loading state
+            submitBtn.disabled = true;
+            const originalText = submitBtn.textContent;
+            submitBtn.innerHTML = '<span class="spinner"></span>Submitting...';
+
+            try {
+                const formData = new FormData();
+                formData.append('file', file);
+
+                const response = await fetch(`/submit/${labId}`, {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const data = await response.json();
+
+                if (!response.ok) {
+                    showError(data.detail || 'Submission failed');
+                    return;
+                }
+
+                displayResults(data.result);
+            } catch (error) {
+                showError('Error submitting rule: ' + error.message);
+            } finally {
+                submitBtn.disabled = false;
+                submitBtn.textContent = originalText;
+            }
+        });
+
+        function showError(message) {
+            errorMessage.textContent = message;
+            errorMessage.style.display = 'block';
+        }
+
+        function displayResults(result) {
+            // Display status
+            const passed = result.passed;
+            statusMessage.innerHTML = passed 
+                ? '<div class="status-passed">✓ PASSED - Rule is effective!</div>'
+                : '<div class="status-failed">✗ FAILED - Rule needs adjustment</div>';
+
+            // Lab results
+            document.getElementById('labTotal').textContent = result.lab.total_files;
+            document.getElementById('labMatched').textContent = result.lab.matched_files;
+            displayMatches('labMatchesList', result.lab.matches);
+
+            // Benign results
+            document.getElementById('benignTotal').textContent = result.benign.total_files;
+            document.getElementById('benignMatched').textContent = result.benign.matched_files;
+            displayMatches('benignMatchesList', result.benign.matches);
+
+            // Random results
+            document.getElementById('randomTotal').textContent = result.random.total_files;
+            document.getElementById('randomMatched').textContent = result.random.matched_files;
+            displayMatches('randomMatchesList', result.random.matches);
+
+            resultsContainer.classList.add('show');
+        }
+
+        function displayMatches(containerId, matches) {
+            const container = document.getElementById(containerId);
+            if (matches && matches.length > 0) {
+                container.innerHTML = '<div class="matches-list">' + 
+                    matches.map(m => `<div class="match-item">${m}</div>`).join('') +
+                    '</div>';
+            } else {
+                container.innerHTML = '';
+            }
+        }
+
+        // Load labs when page loads
+        loadLabs();
+    </script>
+</body>
+</html>

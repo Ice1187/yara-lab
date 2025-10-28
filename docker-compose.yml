@@ -1,0 +1,44 @@
+services:
+  api:
+    build:
+      context: ./api
+      dockerfile: Dockerfile
+    ports:
+      - "9000:8000"
+    volumes:
+      - ./api:/app  # Mount API code for live updates
+    networks:
+      - yara-internal  # For scanner communication
+      - default        # For internet access
+    depends_on:
+      - scanner
+    restart: unless-stopped
+
+  scanner:
+    build:
+      context: ./scanner
+      dockerfile: Dockerfile
+    volumes:
+      - ./sample:/samples:ro
+      - ./scanner:/app  # Mount scanner code for live updates
+    networks:
+      - yara-internal  # ONLY internal network - no internet!
+    restart: unless-stopped
+    # Additional security: drop unnecessary capabilities
+    cap_drop:
+      - ALL
+    # cap_add:
+    #   - DAC_OVERRIDE  # Needed to read sample files
+    #   - CHOWN
+    #   - SETUID
+    #   - SETGID
+    security_opt:
+      - no-new-privileges:true
+    # To scale: docker compose up --scale scanner=N
+    # But note: will need load balancing for multiple scanners
+
+networks:
+  yara-internal:
+    driver: bridge
+    internal: true  # No external access - truly isolated
+
