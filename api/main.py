@@ -8,16 +8,13 @@ import time
 import random
 from typing import Dict
 
-app = FastAPI(title="YARA Rule Submission Platform")
-
-SCANNER_URL = "http://scanner:5000/scan"
-
-# Hardcoded lab configuration
+SHOW_MATCH_DETAIL = False
 AVAILABLE_LABS = ["lab1", "lab2"]
-
-# Rate limiting configuration
 RATE_LIMIT_SECONDS = 60
 SESSION_EXPIRY_SECONDS = 3600  # 1 hour, matching cookie max_age
+SCANNER_URL = "http://scanner:5000/scan"
+
+app = FastAPI(title="YARA Rule Submission Platform")
 
 # Session storage: session_id -> {"created_at": timestamp, "last_upload": timestamp}
 session_data: Dict[str, Dict[str, float]] = {}
@@ -112,6 +109,25 @@ def check_rate_limit(session_id: str) -> tuple[bool, int]:
     return False, seconds_remaining
 
 
+def determine_scan_status(result: dict) -> str:
+    """Determine the scan status message based on scanner results."""
+    benign_matched = result.get("benign", {}).get("matched_files", 0)
+    random_matched = result.get("random", {}).get("matched_files", 0)
+    lab_matched = result.get("lab", {}).get("matched_files", 0)
+    lab_total = result.get("lab", {}).get("total_files", 0)
+    
+    if benign_matched > 0:
+        return "False Positive Detected (benign)"
+    if random_matched > 0:
+        return "False Positive Detected (random)"
+    if lab_matched == 0:
+        return "None Detected"
+    if lab_matched < lab_total:
+        return "Partial Samples Detected"
+
+    return "All Samples Detected"
+
+
 @app.get("/")
 async def root():
     return FileResponse("static/index.html", media_type="text/html")
@@ -201,12 +217,18 @@ async def submit_rule(
             "created_at": current_time,
             "last_upload": current_time
         }
-    
-    return JSONResponse(content={
+
+    scan_status = determine_scan_status(result)
+
+    response_data = {
         "status": "success",
         "lab_id": lab_id,
-        "result": result
-    })
+        "scan_status": scan_status,
+    }
+    if SHOW_MATCH_DETAIL:
+        response_data["result"] = result
+    
+    return JSONResponse(content=response_data)
 
 
 @app.get("/health")

@@ -235,44 +235,45 @@
 
         <div class="results" id="resultsContainer">
             <div id="statusMessage"></div>
+            <div id="resultDetails" style="display: none;">
+                <div class="result-section">
+                    <div class="result-title">Lab Results:</div>
+                    <div class="result-stat">
+                        <span class="result-label">Total Files:</span>
+                        <span class="result-value" id="labTotal">-</span>
+                    </div>
+                    <div class="result-stat">
+                        <span class="result-label">Matched Files:</span>
+                        <span class="result-value" id="labMatched">-</span>
+                    </div>
+                    <div id="labMatchesList"></div>
+                </div>
 
-            <div class="result-section">
-                <div class="result-title">Lab Results:</div>
-                <div class="result-stat">
-                    <span class="result-label">Total Files:</span>
-                    <span class="result-value" id="labTotal">-</span>
+                <div class="result-section">
+                    <div class="result-title">Benign Files:</div>
+                    <div class="result-stat">
+                        <span class="result-label">Total Files:</span>
+                        <span class="result-value" id="benignTotal">-</span>
+                    </div>
+                    <div class="result-stat">
+                        <span class="result-label">Matched Files:</span>
+                        <span class="result-value" id="benignMatched">-</span>
+                    </div>
+                    <div id="benignMatchesList"></div>
                 </div>
-                <div class="result-stat">
-                    <span class="result-label">Matched Files:</span>
-                    <span class="result-value" id="labMatched">-</span>
-                </div>
-                <div id="labMatchesList"></div>
-            </div>
 
-            <div class="result-section">
-                <div class="result-title">Benign Files:</div>
-                <div class="result-stat">
-                    <span class="result-label">Total Files:</span>
-                    <span class="result-value" id="benignTotal">-</span>
+                <div class="result-section">
+                    <div class="result-title">Random Files:</div>
+                    <div class="result-stat">
+                        <span class="result-label">Total Files:</span>
+                        <span class="result-value" id="randomTotal">-</span>
+                    </div>
+                    <div class="result-stat">
+                        <span class="result-label">Matched Files:</span>
+                        <span class="result-value" id="randomMatched">-</span>
+                    </div>
+                    <div id="randomMatchesList"></div>
                 </div>
-                <div class="result-stat">
-                    <span class="result-label">Matched Files:</span>
-                    <span class="result-value" id="benignMatched">-</span>
-                </div>
-                <div id="benignMatchesList"></div>
-            </div>
-
-            <div class="result-section">
-                <div class="result-title">Random Files:</div>
-                <div class="result-stat">
-                    <span class="result-label">Total Files:</span>
-                    <span class="result-value" id="randomTotal">-</span>
-                </div>
-                <div class="result-stat">
-                    <span class="result-label">Matched Files:</span>
-                    <span class="result-value" id="randomMatched">-</span>
-                </div>
-                <div id="randomMatchesList"></div>
             </div>
         </div>
     </div>
@@ -285,6 +286,7 @@
         const errorMessage = document.getElementById('errorMessage');
         const resultsContainer = document.getElementById('resultsContainer');
         const statusMessage = document.getElementById('statusMessage');
+        const resultDetails = document.getElementById('resultDetails');
 
         // Load available labs on page load
         async function loadLabs() {
@@ -345,7 +347,7 @@
                     return;
                 }
 
-                displayResults(data.result);
+                displayResults(data);
             } catch (error) {
                 showError('Error submitting rule: ' + error.message);
             } finally {
@@ -359,29 +361,32 @@
             errorMessage.style.display = 'block';
         }
 
-        function displayResults(result) {
-            // Display status
-            const passed = result.passed;
-            statusMessage.innerHTML = passed 
-                ? '<div class="status-passed">✓ PASSED - Rule is effective!</div>'
-                : '<div class="status-failed">✗ FAILED - Rule needs adjustment</div>';
+        function displayResults(data) {
+            // Display status message
+            const scanStatus = data.scan_status || 'Unknown';
+            const isSuccess = scanStatus === 'All Samples Detected';
+            
+            statusMessage.innerHTML = isSuccess
+                ? '<div class="status-passed">✓ ' + scanStatus + '</div>'
+                : '<div class="status-failed">✗ ' + scanStatus + '</div>';
 
-            // Lab results
-            document.getElementById('labTotal').textContent = result.lab.total_files;
-            document.getElementById('labMatched').textContent = result.lab.matched_files;
-            displayMatches('labMatchesList', result.lab.matches);
-
-            // Benign results
-            document.getElementById('benignTotal').textContent = result.benign.total_files;
-            document.getElementById('benignMatched').textContent = result.benign.matched_files;
-            displayMatches('benignMatchesList', result.benign.matches);
-
-            // Random results
-            document.getElementById('randomTotal').textContent = result.random.total_files;
-            document.getElementById('randomMatched').textContent = result.random.matched_files;
-            displayMatches('randomMatchesList', result.random.matches);
+            // Show/hide detailed results based on availability
+            if (data.result) {
+                updateResultSection('lab', data.result.lab);
+                updateResultSection('benign', data.result.benign);
+                updateResultSection('random', data.result.random);
+                resultDetails.style.display = 'block';
+            } else {
+                resultDetails.style.display = 'none';
+            }
 
             resultsContainer.classList.add('show');
+        }
+
+        function updateResultSection(sectionName, sectionData) {
+            document.getElementById(`${sectionName}Total`).textContent = sectionData?.total_files || 0;
+            document.getElementById(`${sectionName}Matched`).textContent = sectionData?.matched_files || 0;
+            displayMatches(`${sectionName}MatchesList`, sectionData?.matches);
         }
 
         function displayMatches(containerId, matches) {
