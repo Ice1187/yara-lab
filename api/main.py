@@ -5,6 +5,7 @@ import httpx
 import re
 import uuid
 import time
+import random
 from typing import Dict
 
 app = FastAPI(title="YARA Rule Submission Platform")
@@ -16,7 +17,10 @@ AVAILABLE_LABS = ["lab1", "lab2"]
 
 # Rate limiting configuration
 RATE_LIMIT_SECONDS = 60
-session_uploads: Dict[str, float] = {}  # session_id -> last_upload_timestamp
+SESSION_EXPIRY_SECONDS = 3600  # 1 hour, matching cookie max_age
+
+# Session storage: session_id -> {"created_at": timestamp, "last_upload": timestamp}
+session_data: Dict[str, Dict[str, float]] = {}
 
 
 def validate_yara_rule(content: str) -> bool:
@@ -35,30 +39,71 @@ def validate_yara_rule(content: str) -> bool:
     return True
 
 
+def is_session_expired(session_id: str) -> bool:
+    """Check if a session has expired based on its creation time."""
+    if session_id not in session_data:
+        return True
+    
+    current_time = time.time()
+    created_at = session_data[session_id].get("created_at", 0)
+    
+    return (current_time - created_at) >= SESSION_EXPIRY_SECONDS
+
+
+def cleanup_expired_sessions():
+    """Remove expired sessions from memory to prevent memory leaks."""
+    current_time = time.time()
+    expired_sessions = [
+        session_id for session_id, data in session_data.items()
+        if (current_time - data.get("created_at", 0)) >= SESSION_EXPIRY_SECONDS
+    ]
+    
+    for session_id in expired_sessions:
+        del session_data[session_id]
+    
+    return len(expired_sessions)
+
+
 def get_or_create_session(request: Request, response: Response) -> str:
     """Get existing session ID from cookie or create a new one."""
+    if random.random() < 0.1:
+        cleanup_expired_sessions()
+    
     session_id = request.cookies.get("session_id")
-    if not session_id:
+    
+    if not session_id or is_session_expired(session_id):
+        if session_id and session_id in session_data:
+            del session_data[session_id]
+        
         session_id = str(uuid.uuid4())
+        current_time = time.time()
+        session_data[session_id] = {
+            "created_at": current_time,
+            "last_upload": 0
+        }
         response.set_cookie(
             key="session_id",
             value=session_id,
-            max_age=3600,  # 1 hour
+            max_age=SESSION_EXPIRY_SECONDS,
             httponly=True,
             samesite="lax"
         )
+    else:
+        if session_id not in session_data:
+            current_time = time.time()
+            session_data[session_id] = {
+                "created_at": current_time,
+                "last_upload": 0
+            }
+    
     return session_id
 
 
 def check_rate_limit(session_id: str) -> tuple[bool, int]:
-    """
-    Check if session can upload based on rate limit.
-    
-    Returns:
-        (can_upload: bool, seconds_remaining: int)
-    """
+    """Check if session can upload based on rate limit."""
     current_time = time.time()
-    last_upload = session_uploads.get(session_id, 0)
+    session_info = session_data.get(session_id, {})
+    last_upload = session_info.get("last_upload", 0)
     
     if current_time - last_upload >= RATE_LIMIT_SECONDS:
         return True, 0
@@ -69,18 +114,11 @@ def check_rate_limit(session_id: str) -> tuple[bool, int]:
 
 @app.get("/")
 async def root():
-    """Serve the frontend HTML."""
     return FileResponse("static/index.html", media_type="text/html")
 
 
 @app.get("/labs")
 async def list_labs():
-    """
-    List all available labs.
-    
-    Returns:
-        List of available lab IDs
-    """
     return {
         "labs": AVAILABLE_LABS,
         "count": len(AVAILABLE_LABS)
@@ -94,18 +132,7 @@ async def submit_rule(
     lab_id: str = Path(..., description="Lab identifier (e.g., 'lab1', 'lab2')"),
     file: UploadFile = File(...)
 ):
-    """
-    Submit a YARA rule file for scanning against a specific lab.
-    
-    The rule will be validated and then run against lab-specific samples and benign files.
-    
-    Args:
-        lab_id: The lab identifier (e.g., 'lab1', 'lab2')
-        file: YARA rule file to submit
-    
-    Returns:
-        Detailed scan results including matches for lab samples and benign files
-    """
+    """Submit a YARA rule file for scanning against a specific lab."""
     
     session_id = get_or_create_session(request, response)
     
@@ -165,7 +192,15 @@ async def submit_rule(
         )
     
     # Update last upload timestamp for this session
-    session_uploads[session_id] = time.time()
+    current_time = time.time()
+    if session_id in session_data:
+        session_data[session_id]["last_upload"] = current_time
+    else:
+        # Shouldn't happen, but create entry if missing
+        session_data[session_id] = {
+            "created_at": current_time,
+            "last_upload": current_time
+        }
     
     return JSONResponse(content={
         "status": "success",
